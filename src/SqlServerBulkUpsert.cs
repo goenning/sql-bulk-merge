@@ -9,6 +9,7 @@ namespace SqlBulkMerge
 {
     public class SqlServerBulkUpsert
     {
+        private static Random random = new Random((int)DateTime.Now.Ticks);
         private SqlConnection conn;
         private SqlTransaction trans;
         private string tableName;
@@ -16,70 +17,17 @@ namespace SqlBulkMerge
         private string[] keyColumns;
         private string[] deleteKeyColumns;
 
-        public SqlServerBulkUpsert(SqlConnection conn, SqlTransaction trans, string schema, string tableName, string[] keyColumns, string[] deleteKeyColumns)
+        public SqlServerBulkUpsert(SqlConnection conn, SqlTransaction trans, string tableName, string[] keyColumns, string[] deleteKeyColumns)
         {
             this.conn = conn;
             this.trans = trans;
-            this.tempTableName = string.Format("#{0}", tableName);
-            this.tableName = string.Format("{0}.{1}", schema, tableName);
+            this.tempTableName = string.Format("#{0}", RandomString(10));
+            this.tableName = tableName;
             this.keyColumns = keyColumns;
             this.deleteKeyColumns = deleteKeyColumns;
 
             if (this.conn.State == ConnectionState.Closed)
                 this.conn.Open();
-        }
-
-        public void DoWith(IDataReader dr)
-        {
-            DataTable tableSchema = GetTableSchema();
-            this.CreateTempTable(tableSchema);
-            this.BulkInsertTo(dr);
-            this.MergeTempTableWithTargetTable(tableSchema);
-            this.DropTempTable();
-        }
-
-        public void BulkInsertTo(IDataReader dr)
-        {
-            DataTable dt = this.BuildDataTable();
-
-            dt.Rows.Clear();
-
-            while (dr.Read())
-            {
-                DataRow row = dt.NewRow();
-                foreach (DataColumn column in dt.Columns)
-                {
-                    object value = dr.GetValue(dr.GetOrdinal(column.ColumnName));
-                    if (value == DBNull.Value && !column.AllowDBNull)
-                    {
-                        if (column.DataType.Equals(typeof(String)))
-                            value = "";
-                        else
-                            value = Activator.CreateInstance(column.DataType);
-                    }
-                    row[column] = value;
-                }
-                dt.Rows.Add(row);
-
-                if (dt.Rows.Count == 50000)
-                {
-                    using (SqlBulkCopy bulk = new SqlBulkCopy(this.conn, SqlBulkCopyOptions.TableLock, this.trans))
-                    {
-                        bulk.DestinationTableName = this.tempTableName;
-                        bulk.WriteToServer(dt);
-                    }
-                    dt.Rows.Clear();
-                }
-            }
-
-            if (dt.Rows.Count > 0)
-            {
-                using (SqlBulkCopy bulk = new SqlBulkCopy(this.conn, SqlBulkCopyOptions.TableLock, this.trans))
-                {
-                    bulk.DestinationTableName = this.tempTableName;
-                    bulk.WriteToServer(dt);
-                }
-            }
         }
 
         public MergeResults DoWith<T>(IEnumerable<T> items, Action<T, DataRow> itemToRow)
@@ -306,6 +254,19 @@ namespace SqlBulkMerge
         private static string SQLGetType(DataColumn column)
         {
             return SQLGetType(column.DataType, column.MaxLength, 18, 0);
+        }
+
+        private string RandomString(int size)
+        {
+            StringBuilder builder = new StringBuilder();
+            char ch;
+            for (int i = 0; i < size; i++)
+            {
+                ch = Convert.ToChar(Convert.ToInt32(Math.Floor(26 * random.NextDouble() + 65)));
+                builder.Append(ch);
+            }
+
+            return builder.ToString();
         }
     }
 }

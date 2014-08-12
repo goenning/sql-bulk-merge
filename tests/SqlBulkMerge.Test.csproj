@@ -52,8 +52,9 @@
   </Choose>
   <ItemGroup>
     <Compile Include="BaseBulkTest.cs" />
+    <Compile Include="BasicBulkTest.cs" />
     <Compile Include="Models\Country.cs" />
-    <Compile Include="JustInsertBulkTest.cs" />
+    <Compile Include="SimpleBulkTest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -63,7 +64,9 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <None Include="App.config" />
+    <None Include="App.config">
+      <SubType>Designer</SubType>
+    </None>
     <None Include="packages.config" />
   </ItemGroup>
   <Choose>

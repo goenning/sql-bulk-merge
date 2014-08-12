@@ -39,6 +39,7 @@
   <ItemGroup>
     <Compile Include="MergeResults.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SqlConnectionExtension.cs" />
     <Compile Include="SqlServerBulkUpsert.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
