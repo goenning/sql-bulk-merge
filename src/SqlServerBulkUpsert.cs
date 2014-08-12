@@ -82,13 +82,14 @@ namespace SqlBulkMerge
             }
         }
 
-        public void DoWith<T>(IEnumerable<T> items, Action<T, DataRow> itemToRow)
+        public MergeResults DoWith<T>(IEnumerable<T> items, Action<T, DataRow> itemToRow)
         {
             DataTable tableSchema = GetTableSchema();
             this.CreateTempTable(tableSchema);
             this.BulkInsertTo(items, itemToRow);
-            this.MergeTempTableWithTargetTable(tableSchema);
+            MergeResults results = this.MergeTempTableWithTargetTable(tableSchema);
             this.DropTempTable();
+            return results;
         }
 
         private void BulkInsertTo<T>(IEnumerable<T> items, Action<T, DataRow> itemToRow)
@@ -126,7 +127,7 @@ namespace SqlBulkMerge
             }
         }
 
-        private void MergeTempTableWithTargetTable(DataTable schema)
+        private MergeResults MergeTempTableWithTargetTable(DataTable schema)
         {
             string[] columns = schema.Rows.OfType<DataRow>()
                                           .Where(x => Convert.ToBoolean(x["IsIdentity"]) == false)
@@ -149,7 +150,9 @@ namespace SqlBulkMerge
                                         string.Join(",", allColumns.Select(x => "source." + x)));
 
             string sql = string.Format(
-                         @"MERGE {0} AS target
+                         @"DECLARE @output TABLE (action VARCHAR(20))
+
+                           MERGE {0} AS target
                            USING {1} AS source
                            ON {2}",
                            this.tableName,
@@ -173,12 +176,39 @@ namespace SqlBulkMerge
                 sql += string.Format(" WHEN NOT MATCHED BY source AND {0} THEN DELETE", string.Join(" AND ", columnDeleteString));
             }
 
-            sql += ";";
+            sql += @" OUTPUT $action INTO @output;
+
+                     SELECT action, COUNT(*) as quantity
+                     FROM @output  
+                     GROUP BY action;";
 
             using (SqlCommand cmd = new SqlCommand(sql, this.conn, this.trans))
             {
                 cmd.CommandTimeout = Convert.ToInt32(TimeSpan.FromMinutes(30).TotalSeconds);
-                cmd.ExecuteNonQuery();
+                using(SqlDataReader dr = cmd.ExecuteReader())
+                {
+                    int rowsInserted = 0;
+                    int rowsUpdated = 0;
+                    int rowsDeleted = 0;
+                    while (dr.Read())
+                    {
+                        string action = dr.GetString(dr.GetOrdinal("action"));
+                        int quantity = dr.GetInt32(dr.GetOrdinal("quantity"));
+                        switch (action)
+                        {
+                            case "UPDATE":
+                                rowsUpdated = quantity;
+                                break;
+                            case "INSERT":
+                                rowsInserted = quantity;
+                                break;
+                            case "DELETE":
+                                rowsDeleted = quantity;
+                                break;
+                        }
+                    }
+                    return new MergeResults(rowsInserted, rowsUpdated, rowsDeleted);
+                }
             }
         }
 
